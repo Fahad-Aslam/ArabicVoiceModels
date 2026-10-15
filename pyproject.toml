@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "arabic-voice"
+version = "0.1.0"
+description = "Multi-backend Emirati Arabic TTS wrappers with a shared interface"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = { text = "MIT" }
+authors = [{ name = "ArabicVoiceModels" }]
+dependencies = [
+  "numpy>=1.24",
+  "soundfile>=0.12",
+  "huggingface_hub>=0.23",
+  "typer>=0.12",
+  "rich>=13.0",
+]
+
+[project.optional-dependencies]
+piper = ["piper-tts>=1.2.0"]
+audar = [
+  "llama-cpp-python>=0.2.90",
+  "neucodec>=0.0.4",
+  "torch>=2.1",
+  "torchao>=0.12.0,<0.15",
+  "librosa>=0.10",
+]
+habibi = [
+  "habibi-tts>=0.1.0",
+  "torch>=2.1",
+  "torchaudio>=2.1",
+  "cached_path",
+  "datasets>=3.0,<4",
+  "huggingface_hub>=0.34,<1",
+]
+# Prefer a dedicated venv for VITS — see README (custom ScienceSoft NeMo fork).
+vits = [
+  "torch>=2.1",
+  "librosa>=0.10",
+  "soundfile>=0.12",
+  "omegaconf",
+]
+qwen = [
+  "qwen-tts>=0.1.1",
+  "torch>=2.1",
+  "transformers==4.57.3",
+  "huggingface_hub>=0.34,<1",
+]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+arabic-voice = "arabic_voice.cli:app"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/assets",
+  "/scripts",
+  "/README.md",
+  "/pyproject.toml",
+]

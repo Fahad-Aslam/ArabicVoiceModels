@@ -11,14 +11,18 @@ from rich.table import Table
 from arabic_voice.base import BackendUnavailableError, MissingDependencyError
 from arabic_voice.paths import OUTPUTS_DIR, SCRIPTS_DIR, ensure_dirs
 from arabic_voice.registry import get_backend, list_backend_ids, list_backends
+from arabic_voice.stt.registry import get_stt_backend, list_stt_backend_ids, list_stt_backends
+from arabic_voice.stt.types import TranscriptionRequest
 from arabic_voice.types import SynthesisRequest
 
 app = typer.Typer(
     name="arabic-voice",
-    help="Emirati Arabic TTS multi-backend wrappers (Mac-friendly).",
+    help="Emirati Arabic TTS + STT multi-backend wrappers (Mac-friendly).",
     add_completion=False,
     no_args_is_help=True,
 )
+asr_app = typer.Typer(help="Speech-to-text (ASR) commands", no_args_is_help=True)
+app.add_typer(asr_app, name="asr")
 console = Console()
 
 
@@ -218,6 +222,120 @@ def compare_prompts_cmd(
                 console.print(f"  [red]{bid}[/red]: {exc}")
 
     console.print(f"\n[bold]Wrote[/bold] {dest}")
+
+
+@asr_app.command("list")
+def asr_list_cmd() -> None:
+    """List available STT backends and license/Mac status."""
+    table = Table(title="Emirati / Gulf STT Backends")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name")
+    table.add_column("License")
+    table.add_column("Mac")
+    table.add_column("Commercial")
+    table.add_column("Extra")
+    table.add_column("Stream?")
+
+    for backend in list_stt_backends():
+        info = backend.info()
+        table.add_row(
+            info.id,
+            info.name,
+            info.license,
+            info.mac_status,
+            "yes" if info.commercial_ok else "NO",
+            info.extra or "-",
+            "yes" if info.streaming else "no",
+        )
+    console.print(table)
+
+
+@asr_app.command("transcribe")
+def asr_transcribe_cmd(
+    backend: str = typer.Option(..., "--backend", "-b", help="STT backend id"),
+    audio: Path = typer.Option(..., "--audio", "-a", help="Input WAV/audio path"),
+    out: Optional[Path] = typer.Option(None, "--out", "-o", help="Output transcript .txt"),
+    language: Optional[str] = typer.Option("ar", "--language", "-l", help="Language hint (ar/auto)"),
+) -> None:
+    """Transcribe one audio file with one STT backend."""
+    ensure_dirs()
+    if not audio.exists():
+        console.print(f"[red]Audio not found: {audio}[/red]")
+        raise typer.Exit(1)
+
+    if out is None:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out = OUTPUTS_DIR / f"{backend}_{stamp}.txt"
+
+    b = get_stt_backend(backend)
+    console.print(f"[bold]Loading[/bold] {backend} …")
+    try:
+        b.ensure_loaded()
+        result = b.transcribe(TranscriptionRequest(audio=audio, language=language))
+    except (MissingDependencyError, BackendUnavailableError, FileNotFoundError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    path = result.write_text(out)
+    console.print(f"[green]Wrote[/green] {path}")
+    console.print(result.text)
+    if result.meta:
+        console.print(f"[dim]meta: {result.meta}[/dim]")
+
+
+@asr_app.command("compare")
+def asr_compare_cmd(
+    audio: Path = typer.Option(..., "--audio", "-a", help="Input WAV/audio path"),
+    backends: str = typer.Option(
+        "whisper_baseline,whisper_gulf_small,whisper_arabic_ft",
+        "--backends",
+        help="Comma-separated STT backend ids",
+    ),
+    out_dir: Optional[Path] = typer.Option(None, "--out-dir"),
+    language: Optional[str] = typer.Option("ar", "--language", "-l"),
+    continue_on_error: bool = typer.Option(
+        True, "--continue-on-error/--fail-fast", help="Keep going if one backend fails"
+    ),
+) -> None:
+    """Run the same audio through multiple STT backends and write transcripts side-by-side."""
+    ensure_dirs()
+    if not audio.exists():
+        console.print(f"[red]Audio not found: {audio}[/red]")
+        raise typer.Exit(1)
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = out_dir or (OUTPUTS_DIR / f"asr_compare_{stamp}")
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "audio_source.txt").write_text(str(audio.resolve()) + "\n", encoding="utf-8")
+
+    ids = [b.strip() for b in backends.split(",") if b.strip()]
+    unknown = [i for i in ids if i not in list_stt_backend_ids()]
+    if unknown:
+        console.print(f"[red]Unknown STT backends: {unknown}[/red]")
+        raise typer.Exit(1)
+
+    summary: list[tuple[str, str]] = []
+    for bid in ids:
+        console.print(f"\n[bold cyan]=== {bid} ===[/bold cyan]")
+        b = get_stt_backend(bid, reload=True)
+        try:
+            b.ensure_loaded()
+            result = b.transcribe(TranscriptionRequest(audio=audio, language=language))
+            path = result.write_text(dest / f"{bid}.txt")
+            console.print(f"[green]OK[/green] {path}")
+            console.print(f"  {result.text[:200]}{'…' if len(result.text) > 200 else ''}")
+            summary.append((bid, result.text))
+        except Exception as exc:
+            console.print(f"[red]FAIL[/red] {bid}: {exc}")
+            (dest / f"{bid}.error.txt").write_text(str(exc), encoding="utf-8")
+            summary.append((bid, f"ERROR: {exc}"))
+            if not continue_on_error:
+                raise typer.Exit(1) from exc
+
+    console.print(f"\n[bold]Results in[/bold] {dest}")
+    for bid, status in summary:
+        preview = status.replace("\n", " ")[:80]
+        console.print(f"  • {bid}: {preview}")
 
 
 if __name__ == "__main__":

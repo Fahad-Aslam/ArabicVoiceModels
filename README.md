@@ -1,6 +1,8 @@
-# Arabic Voice Models — Emirati TTS Multi-Wrapper (Mac)
+# Arabic Voice Models — Emirati TTS + STT Multi-Wrapper (Mac)
 
-Shared Python interface + CLI to **qualitatively A/B open-source Emirati / Gulf Arabic TTS** backends on this Mac (CPU / Apple MPS). Pick a winner for your orchestrator after listening.
+Shared Python interface + CLI to **qualitatively A/B open-source Emirati / Gulf Arabic TTS and STT** backends on this Mac (CPU / Apple MPS / MLX). Pick winners for your orchestrator after listening and reading transcripts.
+
+STT research notes: [`docs/STT_RESEARCH.md`](docs/STT_RESEARCH.md).
 
 ## Environment (important)
 
@@ -35,28 +37,35 @@ If this machine already has a working env at `.venv313`, activate that instead o
 2. `huggingface-cli login` (or `export HF_TOKEN=hf_...`)  
 3. Re-run synthesis
 
+## Demo path map (~20s samples)
+
+Checked-in qualitative demos (gitignored elsewhere under `outputs/`):
+
+| Path | What |
+|------|------|
+| `outputs/tts_demo/` | ~20s Emirati TTS WAVs + `prompt.txt` + per-backend notes |
+| `outputs/asr_demo/` | Same audio transcribed by STT backends → `*.txt` transcripts |
+| `outputs/tts_demo/README.md` | TTS listen order |
+| `outputs/asr_demo/README.md` | ASR compare notes |
+
 ## Orchestrator API
 
 ```python
 from arabic_voice import get_backend, SynthesisRequest
+from arabic_voice import get_stt_backend, TranscriptionRequest
 
 tts = get_backend("piper_emirati")
 result = tts.synthesize(SynthesisRequest(text="ترا الجو وايد حلو اليوم"))
 result.write_wav("outputs/out.wav")
-# result.audio  -> np.ndarray
-# result.sample_rate
+
+asr = get_stt_backend("whisper_baseline")
+tr = asr.transcribe(TranscriptionRequest(audio="outputs/out.wav", language="ar"))
+print(tr.text)
 ```
 
-All backends implement:
+TTS backends implement `info` / `load` / `synthesize`. STT backends implement `info` / `load` / `transcribe`.
 
-```python
-class TTSBackend:
-    def info(self) -> ModelInfo: ...
-    def load(self) -> None: ...
-    def synthesize(self, req: SynthesisRequest) -> SynthesisResult: ...
-```
-
-## Backends
+## TTS backends
 
 | ID | Model | License | Mac | Commercial |
 |----|-------|---------|-----|------------|
@@ -68,24 +77,48 @@ class TTSBackend:
 
 Deferred on Mac: Magpie-Emirates, Emirati FastPitch (CUDA/NeMo Magpie pins).
 
+## STT backends
+
+| ID | Model | License | Mac | Commercial |
+|----|-------|---------|-----|------------|
+| `jais_asr` | [IFM/Jais-ASR](https://huggingface.co/IFM/Jais-ASR) | Apache-2.0 | Heavy (~12GB; often OOM) | Yes |
+| `audar_asr_flash` | [Audar-ASR V1 Flash](https://huggingface.co/audarai/Audar-ASR-V1-Flash) | AudarAI OL | Good (Transformers) | Yes |
+| `qwen_asr_uae` | [Qwen3-ASR Arabic UAE](https://huggingface.co/vadimbelsky/qwen3-asr-arabic-uae) | Apache-2.0 | Heavy (MPS; may OOM) | Yes |
+| `whisper_baseline` | Whisper large-v3-turbo (mlx / faster-whisper) | MIT | Excellent | Yes |
+| `whisper_arabic_ft` | [Arabic 4-dialect FT](https://huggingface.co/dev-ahmedhany/whisper-large-v3-arabic-ft-v3) | Apache-2.0 | Good (CT2 int8) | Yes |
+| `whisper_gulf_small` | [Gulf Whisper-small](https://huggingface.co/otozz/whisper-small-dialect_gulf) | MIT | Excellent | Yes |
+| `wav2vec_emirati` | [wav2vec2 Emirati](https://huggingface.co/eabayed/wav2vec2emiratidialict_1) | **GPL-3.0** | Good | **No** (GPL) |
+
+Install STT extras (prefer one group at a time if deps conflict):
+
+```bash
+pip install -e ".[asr-whisper]"   # mlx-whisper + faster-whisper — start here
+pip install -e ".[asr-qwen]"      # Audar ASR Flash + Qwen ASR UAE
+pip install -e ".[asr-jais]"      # Jais-ASR (large)
+pip install -e ".[asr-wav2vec]"   # legacy Emirati CTC (GPL)
+```
+
 ## CLI
 
 ```bash
+# TTS
 arabic-voice list
-
 arabic-voice synth -b piper_emirati -t "هني المكتب، تفضل اقعد"
+arabic-voice compare -t "أهلًا، شحالك؟" --backends piper_emirati,audar_flash,habibi_uae
+arabic-voice compare-prompts --backends piper_emirati --limit 3
 
 # Cloning backends need a short ref clip — see assets/refs/README.md
 arabic-voice synth -b habibi_uae -t "ترا الدرب صوب دبي اليوم وايد زحمة" \
   --ref-audio assets/refs/uae_ref.wav --ref-text "$(cat assets/refs/uae_ref.txt)"
 
-arabic-voice compare -t "أهلًا، شحالك؟" \
-  --backends piper_emirati,audar_flash,habibi_uae
-
-arabic-voice compare-prompts --backends piper_emirati --limit 3
+# STT
+arabic-voice asr list
+arabic-voice asr transcribe -b whisper_baseline -a outputs/tts_demo/piper_emirati.wav
+arabic-voice asr compare -a outputs/tts_demo/piper_emirati.wav \
+  --backends whisper_baseline,whisper_gulf_small,whisper_arabic_ft
 ```
 
-Prompts live in [`scripts/prompts_emirati.txt`](scripts/prompts_emirati.txt). WAVs land under `outputs/`.
+Prompts live in [`scripts/prompts_emirati.txt`](scripts/prompts_emirati.txt). WAVs / transcripts land under `outputs/`.
 
 ## Reference audio (Habibi / Audar)
 
@@ -131,5 +164,6 @@ The Emirati fine-tune is ~1.7B. Expect MPS memory pressure. On OOM the backend r
 ## License notes
 
 - This **wrapper code** is MIT.  
-- **Habibi UAE / Unified** weights are non-commercial (SADA/Mixat). Fine for local eval; not for commercial redistribution without a separate license.  
-- Always check each checkpoint card before shipping product audio.  
+- **Habibi UAE / Unified** TTS weights are non-commercial (SADA/Mixat). Fine for local eval; not for commercial redistribution without a separate license.  
+- **`wav2vec_emirati`** is GPL-3.0 — keep it out of proprietary product binaries unless you accept GPL terms.  
+- Always check each checkpoint card before shipping product audio or transcripts.  

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "arabic-voice"
 version = "0.1.0"
-description = "Multi-backend Emirati Arabic TTS wrappers with a shared interface"
+description = "Multi-backend Emirati Arabic TTS + STT wrappers with a shared interface"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 license = { text = "MIT" }
@@ -48,6 +48,36 @@ qwen = [
   "transformers==4.57.3",
   "huggingface_hub>=0.34,<1",
 ]
+# --- STT extras ---
+asr-whisper = [
+  "faster-whisper>=1.0",
+  "mlx-whisper>=0.4; sys_platform == 'darwin'",
+  "librosa>=0.10",
+  "torch>=2.1",
+  "transformers>=4.40",
+]
+asr-qwen = [
+  "qwen-asr>=0.0.4",
+  "torch>=2.1",
+  "transformers>=4.51",
+  "librosa>=0.10",
+  "huggingface_hub>=0.34,<1",
+]
+asr-jais = [
+  "torch>=2.1",
+  "transformers>=4.45",
+  "accelerate>=0.33",
+  "librosa>=0.10",
+  "sentencepiece",
+]
+asr-wav2vec = [
+  "torch>=2.1",
+  "transformers>=4.40",
+  "librosa>=0.10",
+]
+asr = [
+  "arabic-voice[asr-whisper]",
+]
 dev = ["pytest>=8.0"]
 
 [project.scripts]
@@ -58,6 +88,7 @@ include = [
   "/src",
   "/assets",
   "/scripts",
+  "/docs",
   "/README.md",
   "/pyproject.toml",
 ]

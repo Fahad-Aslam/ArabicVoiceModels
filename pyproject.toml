@@ -78,6 +78,7 @@ asr-wav2vec = [
 asr = [
   "arabic-voice[asr-whisper]",
 ]
+ui = ["streamlit>=1.32"]
 dev = ["pytest>=8.0"]
 
 [project.scripts]

@@ -1,7 +1,0 @@
-Audar needs the gated Hugging Face codec `neuphonic/neucodec`.
-1) Create a free HF account and accept the model terms at:
-   https://huggingface.co/neuphonic/neucodec
-2) Authenticate locally:
-   huggingface-cli login
-   # or: export HF_TOKEN=hf_...
-Then re-run synthesis.

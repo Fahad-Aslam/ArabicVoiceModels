@@ -120,6 +120,18 @@ arabic-voice asr compare -a outputs/tts_demo/piper_emirati.wav \
 
 Prompts live in [`scripts/prompts_emirati.txt`](scripts/prompts_emirati.txt). WAVs / transcripts land under `outputs/`.
 
+## Streamlit latency lab (Habibi + Whisper Gulf)
+
+Interactive wall-clock timing for Habibi TTS and Whisper Gulf STT (warm models via `@st.cache_resource`):
+
+```bash
+source .venv313/bin/activate   # or your Python 3.13 venv
+pip install -e ".[habibi,asr-whisper,ui]"
+streamlit run scripts/streamlit_latency.py
+```
+
+Use the **Habibi TTS** tab to synthesize and hear audio; use **Whisper Gulf STT** with mic or upload. Metrics show load ms, infer ms, audio duration, and RTF.
+
 ## Reference audio (Habibi / Audar)
 
 Place:
